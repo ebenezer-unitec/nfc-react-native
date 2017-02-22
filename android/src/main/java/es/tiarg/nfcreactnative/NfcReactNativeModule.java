@@ -27,6 +27,7 @@ import android.util.Log;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -44,6 +45,10 @@ import static android.content.ContentValues.TAG;
 import static android.view.View.X;
 import static com.facebook.common.util.Hex.hexStringToByteArray;
 
+import android.nfc.tech.NfcA;
+
+import java.io.StringWriter;
+import java.io.PrintWriter;
 
 
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
@@ -56,7 +61,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private ReadableArray sectores;
     private NfcAdapter mNfcAdapter;
-    private MifareClassic tag;
+    private NfcA tag;
 
 
     private class ThreadLectura implements Runnable {
@@ -66,11 +71,12 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     tag.connect();
 
                     ByteBuffer bb = ByteBuffer.wrap(tag.getTag().getId());
-                    int id = bb.getInt();
+                    int id = 0;
+                    String idString = byteArrayToHexString(bb.array());
 
                     if (idOperation) {
                         WritableMap idData = Arguments.createMap();
-                        idData.putInt("id", id);
+                        idData.putString("id", idString);
                         reactContext
                                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                                 .emit("onTagDetected", idData);
@@ -89,9 +95,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     {
                         boolean authResult;
                         if (sectores.getMap(i).getString("keyType").equals("A")) {
-                            authResult = tag.authenticateSectorWithKeyA(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
+                            // authResult = tag.authenticateSectorWithKeyA(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
                         } else {
-                            authResult = tag.authenticateSectorWithKeyB(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
+                            // authResult = tag.authenticateSectorWithKeyB(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
                         }
 
                         if (tagId != 0 && writeOperation && tagId != id) {
@@ -106,17 +112,17 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                             tag.close();
                             return;
                         }
-                        
+                        authResult = false;
                         if (authResult) {
                             WritableMap dataSector = Arguments.createMap();
                             WritableArray blocksXSector = Arguments.createArray();
-                            
+
                             if (readOperation) {
-                                for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++) 
+                                for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++)
                                 {
                                     int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
-                                    byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
-                                    blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
+                                    // byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
+                                    // blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
                                 }
 
                                 dataSector.putArray("blocks", blocksXSector);
@@ -124,7 +130,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
                                 readDataSectors.pushMap(dataSector);
                             }
-                            
+
                             if (writeOperation) {
                                 for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++)
                                 {
@@ -137,7 +143,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                                         writeDataA[l] = data.getInt(l);
 
                                     int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
-                                    tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
+                                    // tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
 
                                     blocksXSector.pushMap(Arguments.createMap());
                                 }
@@ -178,9 +184,15 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                         writeOperation = false;
                     }
 
-                } catch (Exception ex) {
+                }
+                catch (Exception ex) {
                     WritableMap error = Arguments.createMap();
-                    error.putString("error", ex.toString());
+                    StringWriter sw = new StringWriter();
+                    PrintWriter pw = new PrintWriter(sw);
+                    ex.printStackTrace(pw);
+                    // sw.toString(); // stack trace as a string
+
+                    error.putString("error", sw.toString());
 
                     reactContext
                             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
@@ -228,13 +240,13 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void handleIntent(Intent intent) {
-        this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
+        this.tag = NfcA.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
     }
 
     public static void setupForegroundDispatch(final Activity activity, NfcAdapter adapter) {
         final Intent intent = new Intent(activity.getApplicationContext(), activity.getClass());
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
+        // intent.setFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
         final PendingIntent pendingIntent = PendingIntent.getActivity(activity.getApplicationContext(), 0, intent, 0);
         adapter.enableForegroundDispatch(activity, pendingIntent, null, null);
     }
@@ -245,6 +257,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     @Override
     public void onNewIntent(Intent intent) {
+        this.idOperation = true;
         handleIntent(intent);
     }
 
@@ -302,7 +315,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private static byte[] arrayIntsToArrayBytes(int[] listaInts) {
-        
+
         ByteBuffer bytebuffer = ByteBuffer.allocate(16);
         for (int i = 0; i < 16; i++) {
             byte high = (byte)((byte)listaInts[i*2] & 0xf0 >> 4);
@@ -313,7 +326,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private static int[] arrayBytesToArrayInts(byte[] listaBytes) {
-        
+
         IntBuffer arraybuffer = IntBuffer.allocate(32);
         for(byte b : listaBytes) {
             int high = (b & 0xf0) >> 4;
@@ -321,12 +334,12 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             arraybuffer.put(high);
             arraybuffer.put(low);
         }
-        
+
         return arraybuffer.array();
     }
 
     static String bin2hex(byte[] data) {
         return String.format("%0" + (data.length * 2) + "X", new BigInteger(1,data));
     }
-    
+
 }
