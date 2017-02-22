@@ -66,7 +66,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private class ThreadLectura implements Runnable {
         public void run() {
-            if (tag != null && (idOperation || readOperation || writeOperation)) {
+            if (tag != null && idOperation) {
                 try {
                     tag.connect();
 
@@ -85,105 +85,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                         tag.close();
                         return;
                     }
-
-                    WritableMap readData = Arguments.createMap();
-                    WritableArray writeData = Arguments.createArray();
-                    WritableArray readDataSectors = Arguments.createArray();
-                    readData.putInt("tagId", id);
-
-                    for (int i = 0; i < sectores.size(); i++)
-                    {
-                        boolean authResult;
-                        if (sectores.getMap(i).getString("keyType").equals("A")) {
-                            // authResult = tag.authenticateSectorWithKeyA(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
-                        } else {
-                            // authResult = tag.authenticateSectorWithKeyB(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
-                        }
-
-                        if (tagId != 0 && writeOperation && tagId != id) {
-                            WritableMap error = Arguments.createMap();
-                            error.putString("error", "Tag id doesn't match");
-
-                            reactContext
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagError", error);
-
-                            writeOperation = false;
-                            tag.close();
-                            return;
-                        }
-                        authResult = false;
-                        if (authResult) {
-                            WritableMap dataSector = Arguments.createMap();
-                            WritableArray blocksXSector = Arguments.createArray();
-
-                            if (readOperation) {
-                                for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++)
-                                {
-                                    int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
-                                    // byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
-                                    // blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
-                                }
-
-                                dataSector.putArray("blocks", blocksXSector);
-                                dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-
-                                readDataSectors.pushMap(dataSector);
-                            }
-
-                            if (writeOperation) {
-                                for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++)
-                                {
-                                    ReadableMap rmBloque = sectores.getMap(i).getArray("blocks").getMap(k);
-
-                                    ReadableNativeArray data = (ReadableNativeArray)rmBloque.getArray("data");
-
-                                    int[] writeDataA = new int[data.size()];
-                                    for(int l = 0; l < data.size(); l++)
-                                        writeDataA[l] = data.getInt(l);
-
-                                    int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
-                                    // tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
-
-                                    blocksXSector.pushMap(Arguments.createMap());
-                                }
-                                dataSector.putArray("blocks", blocksXSector);
-                                dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-                                writeData.pushMap(dataSector);
-                            }
-                        }
-                        else {
-                            WritableMap error = Arguments.createMap();
-                            error.putString("error", "Auth error");
-
-                            reactContext
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagDetected", error);
-
-                            writeOperation = false;
-                            readOperation = false;
-                            tag.close();
-                            return;
-                        }
-                    }
-                    tag.close();
-
-
-                    readData.putArray("lectura",readDataSectors);
-                    if (readOperation) {
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagRead", readData);
-                        readOperation = false;
-                    }
-
-                    if (writeOperation){
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagWrite", writeData);
-                        writeOperation = false;
-                    }
-
                 }
                 catch (Exception ex) {
                     WritableMap error = Arguments.createMap();
@@ -246,7 +147,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     public static void setupForegroundDispatch(final Activity activity, NfcAdapter adapter) {
         final Intent intent = new Intent(activity.getApplicationContext(), activity.getClass());
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        // intent.setFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
         final PendingIntent pendingIntent = PendingIntent.getActivity(activity.getApplicationContext(), 0, intent, 0);
         adapter.enableForegroundDispatch(activity, pendingIntent, null, null);
     }
@@ -257,6 +157,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     @Override
     public void onNewIntent(Intent intent) {
+        // super.onNewIntent(intent);
         this.idOperation = true;
         handleIntent(intent);
     }
